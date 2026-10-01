@@ -40,9 +40,14 @@ services:
       - "5601:5601"
     depends_on:
       - elasticsearch
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.0
+    volumes:
+      - ./docker/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    depends_on:
+      - elasticsearch
 
 volumes:
   postgres_data:
   mongo_data:
   es_data:
-  
