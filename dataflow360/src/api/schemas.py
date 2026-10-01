@@ -1,23 +1,23 @@
 from pydantic import BaseModel
 from typing import Literal
- 
-class PaymentInfo(BaseModel):
-    method: str
-    source_country: str | None = None   # null si paiement cash
-    attempt_number: int
-    status: Literal["success", "failed"]
- 
+
 class OrderItem(BaseModel):
     product_id: str
     quantity: int
-    unit_price_xof: int   # XOF n'a pas de décimales
- 
+    item_total: int   # XOF, pas de décimales
+
 class CheckoutEvent(BaseModel):
+    event_id: str
+    event_type: str
     order_id: str
     customer_id: str
-    items: list[OrderItem]
-    delivery_address: str
-    payment: PaymentInfo
+    order_total_amount: int        # XOF, pas de décimales
+    currency: str
     client_ip: str
     ip_country: str
+    payment_method: str
+    payment_source_country: str | None = None   # vide si paiement cash
+    payment_status: Literal["approved", "pending", "failed"]
+    payment_attempt: int
     event_timestamp: str
+    items: list[OrderItem] | None = None   # absent dans le CSV brut, ajouté par le producteur
