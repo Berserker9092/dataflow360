@@ -18,7 +18,9 @@ from sklearn.metrics import (average_precision_score,       # PR-AUC
                              confusion_matrix,
                              ConfusionMatrixDisplay)
 
-
+# Le script travaille dans son propre dossier (CSV lus ici, modèle écrit dans models/)
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.makedirs("models", exist_ok=True)
 # CHARGEMENT (seules les colonnes utiles sont lues)
 cols_events = ["order_id", "customer_id", "order_total_amount", "ip_country",
                "payment_method", "payment_source_country", "payment_status",
@@ -227,7 +229,9 @@ plt.title(f"Matrice de confusion ({meilleur}, seuil = {seuil:.3f})")
 plt.xlabel("Prédiction du modèle")
 plt.ylabel("Réalité")
 plt.tight_layout()
-plt.show()
+# matrice de confusion
+plt.savefig("models/matrice_confusion.png", dpi=150)
+plt.close()
 
 # Courbes précision-recall des trois modèles
 for nom, p in probas_test.items():
@@ -239,7 +243,8 @@ plt.xlabel("Recall")
 plt.ylabel("Precision")
 plt.title("Courbes précision-recall (test)")
 plt.legend()
-plt.show()
+plt.savefig("models/courbes_precision_recall.png", dpi=150)
+plt.close()
 
 # IMPORTANCE DES VARIABLES (du modèle choisi)
 noms = pipe.named_steps["prep"].get_feature_names_out()
@@ -250,7 +255,10 @@ ordre = np.argsort(valeurs)[-10:]                 # les 10 plus importantes
 plt.barh(noms[ordre], valeurs[ordre])
 plt.title(f"Importance des variables ({meilleur})")
 plt.tight_layout()
-plt.show()
+# importance des variables
+plt.savefig("models/importance_variables.png", dpi=150)
+plt.close()
+
 
 # SAUVEGARDE (pipeline + features + seuil)
 os.makedirs("models", exist_ok=True)
