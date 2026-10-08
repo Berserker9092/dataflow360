@@ -31,3 +31,23 @@ if __name__ == "__main__":
         print("Connexion MongoDB réussie.")
     else:
         print("Échec de la connexion MongoDB.")
+
+
+POSTGRES_HOST = "localhost"
+POSTGRES_PORT = 5433
+POSTGRES_DB = "dataflow360"
+POSTGRES_USER = "dataflow"
+POSTGRES_PASSWORD = "change_me"
+
+
+def get_pg_connection():
+    """Create and return a PostgreSQL connection."""
+    import psycopg
+
+    return psycopg.connect(
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        dbname=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+    )
