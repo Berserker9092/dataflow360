@@ -80,3 +80,42 @@ CREATE TABLE forecasts (
     predicted_units INTEGER,
     PRIMARY KEY (tenant_id, product_id, forecast_date)
 );
+
+
+-- ============================================================
+-- VUES DÉCISIONNELLES
+-- ============================================================
+
+CREATE OR REPLACE VIEW v_revenue_by_period AS
+SELECT
+    tenant_id,
+    DATE_TRUNC('month', order_purchase_timestamp) AS period,
+    SUM(order_total_amount) AS revenue,
+    COUNT(DISTINCT order_id) AS order_count
+FROM orders
+WHERE order_status = 'delivered'
+GROUP BY tenant_id, DATE_TRUNC('month', order_purchase_timestamp);
+
+
+CREATE OR REPLACE VIEW v_average_basket AS
+SELECT
+    tenant_id,
+    AVG(order_total_amount) AS average_basket,
+    COUNT(DISTINCT order_id) AS order_count
+FROM orders
+WHERE order_status = 'delivered'
+GROUP BY tenant_id;
+
+
+CREATE OR REPLACE VIEW v_top_products AS
+SELECT
+    oi.tenant_id,
+    oi.product_id,
+    SUM(oi.item_total) AS revenue,
+    COUNT(DISTINCT oi.order_id) AS order_count
+FROM order_items oi
+JOIN orders o
+    ON o.tenant_id = oi.tenant_id
+    AND o.order_id = oi.order_id
+WHERE o.order_status = 'delivered'
+GROUP BY oi.tenant_id, oi.product_id;

@@ -88,3 +88,24 @@ def clean_products(df: pl.DataFrame) -> pl.DataFrame:
             "stock_alert_threshold",
         ])
     )
+
+def clean_order_items(df: pl.DataFrame) -> pl.DataFrame:
+    """Clean order items before loading into PostgreSQL."""
+    return (
+        df.unique(subset=["order_id", "order_item_id"])
+        .drop_nulls(subset=["order_id", "order_item_id", "product_id"])
+        .with_columns(
+            pl.col("order_item_id").cast(pl.Int64),
+            pl.col("quantity").cast(pl.Int64),
+            pl.col("unit_price").cast(pl.Int64),
+            pl.col("item_total").cast(pl.Int64),
+        )
+        .select([
+            "order_id",
+            "order_item_id",
+            "product_id",
+            "quantity",
+            "unit_price",
+            "item_total",
+        ])
+    )

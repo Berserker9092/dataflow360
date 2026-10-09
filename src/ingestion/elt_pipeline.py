@@ -194,3 +194,49 @@ def load_orders(df: pl.DataFrame):
 
     finally:
         conn.close()
+
+def load_order_items(df: pl.DataFrame):
+    """Load cleaned order items into PostgreSQL."""
+    tenant_uuid = get_tenant_uuid()
+    conn = get_pg_connection()
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM order_items WHERE tenant_id = %s",
+                (tenant_uuid,),
+            )
+
+            rows = [
+                (
+                    tenant_uuid,
+                    row["order_id"],
+                    row["order_item_id"],
+                    row["product_id"],
+                    row["item_total"],
+                )
+                for row in df.iter_rows(named=True)
+            ]
+
+            cur.executemany(
+                """
+                INSERT INTO order_items (
+                    tenant_id,
+                    order_id,
+                    order_item_id,
+                    product_id,
+                    item_total
+                )
+                VALUES (%s, %s, %s, %s, %s)
+                """,
+                rows,
+            )
+
+        conn.commit()
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
