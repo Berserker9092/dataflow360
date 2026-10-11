@@ -20,7 +20,6 @@ def extract_delivered_orders() -> pl.DataFrame:
                 WHERE order_status = 'delivered'
                 """
             )
-
             rows = cur.fetchall()
 
         return pl.DataFrame(
@@ -55,12 +54,14 @@ def calculate_rfm(df: pl.DataFrame) -> pl.DataFrame:
                 .dt.total_days()
             ).alias("recency")
         )
-        .select([
-            "customer_id",
-            "recency",
-            "frequency",
-            "monetary",
-        ])
+        .select(
+            [
+                "customer_id",
+                "recency",
+                "frequency",
+                "monetary",
+            ]
+        )
     )
 
 
@@ -72,9 +73,10 @@ def score_rfm(df: pl.DataFrame) -> pl.DataFrame:
                 6
                 - (
                     pl.col("recency")
-                    .rank(method="average") / pl.len()
+                    .rank(method="average")
+                    / pl.len()
                     * 5
-                ).ceil()
+                ).round(9).ceil()
             )
             .cast(pl.Int64)
             .alias("r_score"),
@@ -88,9 +90,10 @@ def score_rfm(df: pl.DataFrame) -> pl.DataFrame:
             (
                 (
                     pl.col("monetary")
-                    .rank(method="average") / pl.len()
+                    .rank(method="average")
+                    / pl.len()
                     * 5
-                ).ceil()
+                ).round(9).ceil()
             )
             .cast(pl.Int64)
             .alias("m_score"),
