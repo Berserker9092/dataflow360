@@ -213,6 +213,7 @@ def load_order_items(df: pl.DataFrame):
                     row["order_id"],
                     row["order_item_id"],
                     row["product_id"],
+                    row["quantity"],
                     row["item_total"],
                 )
                 for row in df.iter_rows(named=True)
@@ -225,9 +226,10 @@ def load_order_items(df: pl.DataFrame):
                     order_id,
                     order_item_id,
                     product_id,
+                    quantity,
                     item_total
                 )
-                VALUES (%s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 rows,
             )
@@ -239,4 +241,4 @@ def load_order_items(df: pl.DataFrame):
         raise
 
     finally:
-        conn.close()
+         conn.close()
