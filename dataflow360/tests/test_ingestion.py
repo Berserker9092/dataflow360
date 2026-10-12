@@ -1,70 +1,50 @@
-import csv
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from src.ingestion.load_raw_mongo import load_csv_to_mongo
+import polars as pl
+import pytest
+from src.ingestion.clean_olist import clean_orders, clean_products, stock_status
 
 
-class FakeCollection:
-    """Remplace une vraie collection MongoDB : on enregistre juste ce qu'on y insère."""
-    def __init__(self):
-        self.inserted = []
-
-    def insert_many(self, documents):
-        self.inserted.extend(documents)
-
-
-class FakeDatabase:
-    """Remplace une vraie base MongoDB : renvoie une FakeCollection par nom."""
-    def __init__(self):
-        self.collections = {}
-
-    def __getitem__(self, name):
-        if name not in self.collections:
-            self.collections[name] = FakeCollection()
-        return self.collections[name]
-
-
-def test_load_csv_to_mongo_insere_toutes_les_lignes(tmp_path):
-    csv_path = tmp_path / "clients.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["id", "nom"])
-        writer.writeheader()
-        writer.writerow({"id": "1", "nom": "Awa"})
-        writer.writerow({"id": "2", "nom": "Moussa"})
-
-    database = FakeDatabase()
-    load_csv_to_mongo(csv_path, database)
-
-    collection = database["clients"]
-    assert len(collection.inserted) == 2
-    assert collection.inserted[0] == {"id": "1", "nom": "Awa"}
+def test_clean_orders_deduplication_and_nulls():
+    # Données fictives simulant des commandes brutes avec doublons et valeurs nulles
+    data = {
+        "order_id": ["O1", "O2", "O1", None],
+        "customer_id": ["C1", "C2", "C1", "C3"],
+        "order_status": ["delivered", "shipped", "delivered", "processing"],
+        "order_purchase_timestamp": ["2026-01-01 10:00:00", "2026-01-02 11:00:00", "2026-01-01 10:00:00", "2026-01-03 12:00:00"],
+        "order_total_amount": ["100.50", "200.00", "100.50", "50.25"],
+    }
+    df = pl.DataFrame(data)
+    
+    cleaned_df = clean_orders(df)
+    
+    # Vérifications : plus de doublons sur order_id, pas de nulls sur order_id/customer_id, et 2 lignes restantes
+    assert cleaned_df.height == 2
+    assert cleaned_df["order_id"].to_list() == ["O1", "O2"]
+    # Vérifie le cast en Int64 sur order_total_amount selon la logique d'Ousmane
+    assert cleaned_df["order_total_amount"].dtype == pl.Int64
 
 
-def test_load_csv_to_mongo_nom_collection_sans_extension(tmp_path):
-    csv_path = tmp_path / "produits.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["id"])
-        writer.writeheader()
-        writer.writerow({"id": "1"})
-
-    database = FakeDatabase()
-    load_csv_to_mongo(csv_path, database)
-
-    assert "produits" in database.collections
+def test_stock_status_logic():
+    # Test des seuils de stock définis par Ousmane
+    assert stock_status(0, 5) == "RUPTURE"
+    assert stock_status(3, 5) == "ALERTE"
+    assert stock_status(5, 5) == "ALERTE"
+    assert stock_status(10, 5) == "OK"
 
 
-def test_load_csv_to_mongo_fichier_vide(tmp_path):
-    """Cas limite : un CSV avec juste l'en-tête, aucune ligne de données."""
-    csv_path = tmp_path / "vide.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["id"])
-        writer.writeheader()
-
-    database = FakeDatabase()
-    load_csv_to_mongo(csv_path, database)
-
-    collection = database["vide"]
-    assert collection.inserted == []
+def test_clean_products():
+    data = {
+        "product_id": ["P1", "P2", "P1"],
+        "category_name": ["Electronics", "Books", "Electronics"],
+        "product_cost": ["50", "20", "50"],
+        "stock_quantity": ["10", "0", "10"],
+        "stock_alert_threshold": ["5", "5", "5"],
+    }
+    df = pl.DataFrame(data)
+    
+    cleaned_df = clean_products(df)
+    
+    # Vérifications sur le renommage de catégorie et la suppression des doublons
+    assert cleaned_df.height == 2
+    assert "category" in cleaned_df.columns
+    assert "category_name" not in cleaned_df.columns
+    assert cleaned_df["product_cost"].dtype == pl.Int64
