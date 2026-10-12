@@ -165,28 +165,61 @@ def kpi_timeseries(
     ]
 
 
-@router.get("/kpi/by-category", tags=["kpi"], summary="CA et unités par catégorie")
-def kpi_by_category(tenant_id: str = Depends(get_current_tenant), conn=Depends(get_db)):
+@router.get(
+    "/kpi/by-category",
+    tags=["kpi"],
+    summary="Rentabilité par catégorie",
+)
+def kpi_by_category(
+    tenant_id: str = Depends(get_current_tenant),
+    conn=Depends(get_db),
+):
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT COALESCE(NULLIF(p.category, ''), 'Sans catégorie') AS category,
-                   COUNT(DISTINCT oi.order_id) AS orders,
-                   COALESCE(SUM(oi.item_total), 0) AS revenue_xof,
-                   COUNT(*) AS lines
+            SELECT
+                COALESCE(NULLIF(p.category, ''), '—') AS category,
+                COUNT(*) AS units_sold,
+                COALESCE(SUM(oi.item_total), 0) AS revenue_xof,
+                COALESCE(
+                    SUM(COALESCE(p.product_cost, 0)),
+                    0
+                ) AS cogs_xof
             FROM order_items oi
-            JOIN orders o USING (tenant_id, order_id)
-            LEFT JOIN products p ON p.tenant_id = oi.tenant_id AND p.product_id = oi.product_id
-            WHERE oi.tenant_id = %s AND o.order_status != 'cancelled'
-            GROUP BY 1 ORDER BY revenue_xof DESC
-            LIMIT 15
+            JOIN orders o
+              ON o.tenant_id = oi.tenant_id
+             AND o.order_id = oi.order_id
+            LEFT JOIN products p
+              ON p.tenant_id = oi.tenant_id
+             AND p.product_id = oi.product_id
+            WHERE oi.tenant_id = %s
+              AND o.order_status != 'cancelled'
+            GROUP BY COALESCE(NULLIF(p.category, ''), '—')
+            ORDER BY revenue_xof DESC
             """,
             (tenant_id,),
         )
-        return [
-            {"category": c, "orders": int(o), "revenue_xof": int(r), "lines": int(n)}
-            for c, o, r, n in cur.fetchall()
-        ]
+        rows = cur.fetchall()
+
+    categories = []
+
+    for category, units_sold, revenue, cogs in rows:
+        revenue = float(revenue or 0)
+        cogs = float(cogs or 0)
+
+        profit = revenue - cogs
+        margin = round((profit / revenue) * 100, 1) if revenue > 0 else 0
+
+        categories.append({
+            "category": category,
+            "units_sold": int(units_sold or 0),
+            "revenue_xof": round(revenue, 2),
+            "cogs_xof": round(cogs, 2),
+            "profit_xof": round(profit, 2),
+            "margin": margin,
+        })
+
+    return {"categories": categories}
 
 
 @router.get("/kpi/new-vs-returning", tags=["kpi"], summary="Nouveaux vs clients récurrents")
@@ -235,7 +268,7 @@ def customer_segments(
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT c.customer_id, c.city, c.country,
+            SELECT c.customer_id, c.full_name, c.email, c.phone, c.city, c.country,
                    COUNT(o.order_id) AS order_count,
                    COALESCE(SUM(o.order_total_amount), 0) AS lifetime_value,
                    MAX(o.order_purchase_timestamp) AS last_order_at,
@@ -244,14 +277,14 @@ def customer_segments(
             LEFT JOIN orders o ON o.tenant_id = c.tenant_id AND o.customer_id = c.customer_id
               AND o.order_status != 'cancelled'
             WHERE c.tenant_id = %s
-            GROUP BY c.customer_id, c.city, c.country
+            GROUP BY c.customer_id, c.full_name, c.email, c.phone, c.city, c.country
             """,
             (tenant_id,),
         )
         rows = cur.fetchall()
 
     out = []
-    for cid, city_v, country_v, n, ltv, last_at, first_at in rows:
+    for cid, full_name, email, phone, city_v, country_v, n, ltv, last_at, first_at in rows:
         n = int(n or 0)
         ltv = int(ltv or 0)
         # preset segments
@@ -292,6 +325,10 @@ def customer_segments(
             continue
         out.append({
             "customer_id": cid,
+            "full_name": full_name,
+            "customer_name": full_name or (cid[:12] + "…"),
+            "email": email,
+            "phone": phone,
             "city": city_v,
             "country": country_v,
             "order_count": n,
@@ -426,14 +463,21 @@ def stock_overview(
     summary="Alertes de fraude en attente",
     description="Uniquement les alertes du tenant authentifié (HASH Redis par tenant, 24 h).",
 )
-def get_alerts(tenant_id: str = Depends(get_current_tenant)):
+def get_alerts(
+    min_score: int = 70,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Par défaut : uniquement score >= 70 (priorité vendeur)."""
     from src.ml.fraud_detection.scoring import risk_level
 
     raw = get_redis().hgetall(f"fraud_alerts:{tenant_id}")
     alerts = []
     for order_id, value in raw.items():
         data = json.loads(value)
-        alerts.append({"order_id": order_id, **data, "risk": risk_level(data["score"])})
+        score = int(data.get("score", 0))
+        if score < min_score:
+            continue
+        alerts.append({"order_id": order_id, **data, "risk": risk_level(score)})
     return sorted(alerts, key=lambda a: a["score"], reverse=True)
 
 
@@ -465,10 +509,19 @@ def decide(body: FraudDecision, tenant_id: str = Depends(get_current_tenant), co
 def forecast_products(tenant_id: str = Depends(get_current_tenant), conn=Depends(get_db)):
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT product_id, SUM(predicted_units) AS total FROM forecasts WHERE tenant_id = %s "
-            "GROUP BY product_id ORDER BY total DESC",
+            """
+            SELECT f.product_id,
+                   COALESCE(NULLIF(p.product_name, ''), f.product_id) AS product_name,
+                   SUM(f.predicted_units) AS total
+            FROM forecasts f
+            LEFT JOIN products p ON p.tenant_id = f.tenant_id AND p.product_id = f.product_id
+            WHERE f.tenant_id = %s
+            GROUP BY f.product_id, p.product_name
+            ORDER BY total DESC
+            """,
             (tenant_id,),
         )
+        # Liste d'ids (compat select front) — le front peut aussi lire product_name via /kpi/top-products
         return [row[0] for row in cur.fetchall()]
 
 
