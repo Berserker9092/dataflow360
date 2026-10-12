@@ -1,12 +1,18 @@
+-- ============================================================
+-- DATAFLOW360 : SCHEMA POSTGRESQL
+-- ============================================================
+
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE TABLE tenants (
+-- 1. TENANTS
+CREATE TABLE IF NOT EXISTS tenants (
     tenant_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     api_key_hash TEXT NOT NULL UNIQUE
 );
 
-CREATE TABLE customers (
+-- 2. CLIENTS
+CREATE TABLE IF NOT EXISTS customers (
     tenant_id UUID REFERENCES tenants(tenant_id),
     customer_id TEXT NOT NULL,
     city TEXT,
@@ -14,7 +20,8 @@ CREATE TABLE customers (
     PRIMARY KEY (tenant_id, customer_id)
 );
 
-CREATE TABLE products (
+-- 3. PRODUITS
+CREATE TABLE IF NOT EXISTS products (
     tenant_id UUID REFERENCES tenants(tenant_id),
     product_id TEXT NOT NULL,
     category TEXT,
@@ -24,7 +31,8 @@ CREATE TABLE products (
     PRIMARY KEY (tenant_id, product_id)
 );
 
-CREATE TABLE orders (
+-- 4. COMMANDES
+CREATE TABLE IF NOT EXISTS orders (
     tenant_id UUID REFERENCES tenants(tenant_id),
     order_id TEXT NOT NULL,
     customer_id TEXT NOT NULL,
@@ -36,11 +44,13 @@ CREATE TABLE orders (
         REFERENCES customers(tenant_id, customer_id)
 );
 
-CREATE TABLE order_items (
+-- 5. LIGNES DE COMMANDE
+CREATE TABLE IF NOT EXISTS order_items (
     tenant_id UUID REFERENCES tenants(tenant_id),
     order_id TEXT NOT NULL,
     order_item_id INTEGER NOT NULL,
     product_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
     item_total INTEGER NOT NULL,
     PRIMARY KEY (tenant_id, order_id, order_item_id),
     FOREIGN KEY (tenant_id, order_id)
@@ -49,7 +59,12 @@ CREATE TABLE order_items (
         REFERENCES products(tenant_id, product_id)
 );
 
-CREATE TABLE fraud_ground_truth (
+-- Compatibilité avec les bases déjà créées
+ALTER TABLE order_items
+ADD COLUMN IF NOT EXISTS quantity INTEGER NOT NULL DEFAULT 1;
+
+-- 6. VÉRITÉ TERRAIN POUR LA FRAUDE
+CREATE TABLE IF NOT EXISTS fraud_ground_truth (
     tenant_id UUID REFERENCES tenants(tenant_id),
     order_id TEXT NOT NULL,
     is_fraudulent BOOLEAN NOT NULL,
@@ -57,7 +72,8 @@ CREATE TABLE fraud_ground_truth (
     PRIMARY KEY (tenant_id, order_id)
 );
 
-CREATE TABLE fraud_decisions (
+-- 7. DÉCISIONS DE FRAUDE
+CREATE TABLE IF NOT EXISTS fraud_decisions (
     tenant_id UUID REFERENCES tenants(tenant_id),
     order_id TEXT NOT NULL,
     action TEXT NOT NULL CHECK (action IN ('BLOCK', 'PASS')),
@@ -65,7 +81,8 @@ CREATE TABLE fraud_decisions (
     PRIMARY KEY (tenant_id, order_id)
 );
 
-CREATE TABLE rag_documents (
+-- 8. DOCUMENTS POUR LE RAG
+CREATE TABLE IF NOT EXISTS rag_documents (
     id SERIAL PRIMARY KEY,
     tenant_id UUID REFERENCES tenants(tenant_id),
     source_type TEXT NOT NULL,
@@ -73,7 +90,8 @@ CREATE TABLE rag_documents (
     embedding VECTOR(384)
 );
 
-CREATE TABLE forecasts (
+-- 9. PRÉVISIONS
+CREATE TABLE IF NOT EXISTS forecasts (
     tenant_id UUID REFERENCES tenants(tenant_id),
     product_id TEXT NOT NULL,
     forecast_date DATE NOT NULL,
@@ -81,11 +99,43 @@ CREATE TABLE forecasts (
     PRIMARY KEY (tenant_id, product_id, forecast_date)
 );
 
+-- 10. AVIS CLIENTS
+CREATE TABLE IF NOT EXISTS order_reviews (
+    tenant_id UUID NOT NULL,
+    review_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    review_score INTEGER,
+    review_comment_title TEXT,
+    review_comment_message TEXT,
+    review_creation_date TIMESTAMP,
+    PRIMARY KEY (tenant_id, review_id),
+    FOREIGN KEY (tenant_id, order_id)
+        REFERENCES orders(tenant_id, order_id)
+);
+
+-- 11. TICKETS DU SUPPORT CLIENT
+CREATE TABLE IF NOT EXISTS support_tickets (
+    tenant_id UUID NOT NULL,
+    ticket_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    customer_id TEXT NOT NULL,
+    ticket_category TEXT,
+    ticket_subject TEXT,
+    ticket_message TEXT,
+    ticket_status TEXT,
+    created_at TIMESTAMP,
+    PRIMARY KEY (tenant_id, ticket_id),
+    FOREIGN KEY (tenant_id, order_id)
+        REFERENCES orders(tenant_id, order_id),
+    FOREIGN KEY (tenant_id, customer_id)
+        REFERENCES customers(tenant_id, customer_id)
+);
 
 -- ============================================================
 -- VUES DÉCISIONNELLES
 -- ============================================================
 
+-- Chiffre d'affaires mensuel
 CREATE OR REPLACE VIEW v_revenue_by_period AS
 SELECT
     tenant_id,
@@ -96,7 +146,7 @@ FROM orders
 WHERE order_status = 'delivered'
 GROUP BY tenant_id, DATE_TRUNC('month', order_purchase_timestamp);
 
-
+-- Panier moyen
 CREATE OR REPLACE VIEW v_average_basket AS
 SELECT
     tenant_id,
@@ -106,7 +156,7 @@ FROM orders
 WHERE order_status = 'delivered'
 GROUP BY tenant_id;
 
-
+-- Produits les plus rentables
 CREATE OR REPLACE VIEW v_top_products AS
 SELECT
     oi.tenant_id,
