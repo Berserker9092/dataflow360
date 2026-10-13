@@ -1,6 +1,7 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    env_file: .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -9,8 +10,12 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Initialisation automatique (ordre alphabétique)
+      - ./src/storage/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./src/storage/migrations.sql:/docker-entrypoint-initdb.d/02-migrations.sql:ro
+      - ./src/storage/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dataflow"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,35 +31,88 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.15.0
+  api:
+    build: .
+    env_file: .env
     environment:
-      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
-    ports:
-      - "5601:5601"
-    depends_on:
-      - elasticsearch
-  logstash:
-    image: docker.elastic.co/logstash/logstash:8.15.0
+      PYTHONPATH: /app
     volumes:
-      - ./docker/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
-    depends_on:
-      - elasticsearch
+      - .:/app
+      - ./data:/app/data
     ports:
-      - "5000:5000"
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_started
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # Service d'initialisation des données (une seule fois)
+  init:
+    build: .
+    command: bash /app/scripts/init_all.sh
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongo:
+        condition: service_started
+    restart: "no"
+
+  scheduler:
+    build: .
+    command: python -m src.batch.nightly_jobs
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  fraud-consumer:
+    build: .
+    command: python -m src.streaming.consumer
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+
+  simulator:
+    build: .
+    command: python -m scripts.simulate_live
+    env_file: .env
+    environment:
+      API_URL: http://api:8000
+      SIM_INTERVAL: "3"
+      SIM_SUSPECT_RATIO: "0.2"
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   mongo_data:
-  es_data:
+  redis_data:

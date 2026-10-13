@@ -68,9 +68,14 @@ def list_orders(
             f"""
             SELECT o.order_id, o.order_purchase_timestamp, o.customer_id, o.order_status,
                    o.order_total_amount,
+                   c.full_name AS customer_name,
+                   c.city AS customer_city,
+                   c.country AS customer_country,
                    COALESCE((SELECT COUNT(*) FROM order_items oi
-                             WHERE oi.tenant_id = o.tenant_id AND oi.order_id = o.order_id), 0)
+                             WHERE oi.tenant_id = o.tenant_id AND oi.order_id = o.order_id), 0) AS items
             FROM orders o
+            LEFT JOIN customers c
+              ON c.tenant_id = o.tenant_id AND c.customer_id = o.customer_id
             WHERE {wsql}
             ORDER BY {sort_col} {order_dir}
             LIMIT %s OFFSET %s
@@ -79,76 +84,20 @@ def list_orders(
         )
         rows = cur.fetchall()
         items = []
-        for oid, ts, cid, st, amount, nitems in rows:
+        for oid, ts, cid, st, amount, cname, ccity, ccountry, nitems in rows:
             status_out = "canceled" if st == "cancelled" else (st or "")
-            items.append(
-                {
-                    "order_id": oid,
-                    "date": ts.isoformat() if ts else None,
-                    "customer_id": cid,
-                    "status": status_out,
-                    "items": int(nitems),
-                    "amount": int(amount or 0),
-                    "customer_name": None,
-                    "customer_label": None,
-                    "products": [],
-                }
-            )
-        if not items:
-            return {"items": items, "total": total, "page": page, "page_size": page_size}
-
-        order_ids = [it["order_id"] for it in items]
-        customer_ids = list({it["customer_id"] for it in items if it.get("customer_id")})
-
-        cust_map: dict = {}
-        if customer_ids:
-            cur.execute(
-                """
-                SELECT customer_id, full_name, city, country, email, phone
-                FROM customers
-                WHERE tenant_id = %s AND customer_id = ANY(%s)
-                """,
-                (tenant_id, customer_ids),
-            )
-            for cid, full_name, city, country, email, phone in cur.fetchall():
-                parts = [x for x in (full_name, city, country) if x]
-                cust_map[cid] = {
-                    "customer_name": full_name,
-                    "customer_label": " · ".join(parts) if parts else (cid[:12] + "…"),
-                    "email": email,
-                    "phone": phone,
-                    "city": city,
-                    "country": country,
-                }
-
-        cur.execute(
-            """
-            SELECT oi.order_id,
-                   COALESCE(NULLIF(p.product_name, ''), NULLIF(p.category, ''), oi.product_id)
-            FROM order_items oi
-            LEFT JOIN products p ON p.tenant_id = oi.tenant_id AND p.product_id = oi.product_id
-            WHERE oi.tenant_id = %s AND oi.order_id = ANY(%s)
-            ORDER BY oi.order_id, oi.order_item_id
-            """,
-            (tenant_id, order_ids),
-        )
-        prods: dict[str, list[str]] = {}
-        for oid, pname in cur.fetchall():
-            prods.setdefault(oid, []).append(pname)
-
-        for it in items:
-            c = cust_map.get(it["customer_id"])
-            if c:
-                it["customer_name"] = c["customer_name"]
-                it["customer_label"] = c["customer_label"]
-                it["customer_email"] = c.get("email")
-                it["customer_city"] = c.get("city")
-                it["customer_country"] = c.get("country")
-            else:
-                it["customer_label"] = (it["customer_id"] or "")[:12] + "…"
-            it["products"] = prods.get(it["order_id"], [])
-
-    return {"items": items, "total": total, "page": page, "page_size": page_size}
+            items.append({
+                "order_id": oid,
+                "date": ts.isoformat() if ts else None,
+                "customer_id": cid,
+                "customer_name": cname,
+                "customer_city": ccity,
+                "customer_country": ccountry,
+                "status": status_out,
+                "items": int(nitems),
+                "amount": int(amount or 0),
+            })
+        return {"items": items, "total": total, "page": page, "page_size": page_size}
 
 
 @extra_router.get("/orders/export", tags=["orders"])
@@ -181,21 +130,20 @@ def export_orders(
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(
-        ["order_id", "date", "customer_id", "customer_name", "customer_label", "status", "products", "amount"]
+        ["order_id", "date", "customer_id", "customer_name", "customer_city",
+         "customer_country", "status", "amount"]
     )
     for r in all_items:
-        w.writerow(
-            [
-                r["order_id"],
-                r["date"],
-                r["customer_id"],
-                r.get("customer_name"),
-                r.get("customer_label"),
-                r["status"],
-                "; ".join(r.get("products") or []),
-                r["amount"],
-            ]
-        )
+        w.writerow([
+            r["order_id"],
+            r["date"],
+            r["customer_id"],
+            r.get("customer_name"),
+            r.get("customer_city"),
+            r.get("customer_country"),
+            r["status"],
+            r["amount"],
+        ])
     buf.seek(0)
     return StreamingResponse(
         iter([buf.getvalue()]),
@@ -204,105 +152,9 @@ def export_orders(
     )
 
 
-# --------------------------------------------------------------------------- live
-@extra_router.get("/live/feed", tags=["live"])
-def live_feed(
-    limit: int = Query(14, ge=1, le=50),
-    tenant_id: str = Depends(get_current_tenant),
-    conn=Depends(get_db),
-):
-    now = datetime.utcnow()
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT
-              COUNT(*) FILTER (WHERE order_purchase_timestamp >= %s),
-              COALESCE(SUM(order_total_amount) FILTER (WHERE order_purchase_timestamp >= %s), 0),
-              COUNT(*) FILTER (WHERE order_purchase_timestamp >= %s),
-              COALESCE(SUM(order_total_amount) FILTER (WHERE order_purchase_timestamp >= %s), 0)
-            FROM orders
-            WHERE tenant_id = %s AND order_status != 'cancelled'
-            """,
-            (
-                now - timedelta(minutes=5),
-                now - timedelta(minutes=5),
-                now - timedelta(minutes=60),
-                now - timedelta(minutes=60),
-                tenant_id,
-            ),
-        )
-        o5, r5, o60, r60 = cur.fetchone()
-        cur.execute(
-            """
-            SELECT DATE_TRUNC('minute', order_purchase_timestamp) AS m, COUNT(*)
-            FROM orders
-            WHERE tenant_id = %s AND order_status != 'cancelled'
-              AND order_purchase_timestamp >= %s
-            GROUP BY 1 ORDER BY 1
-            """,
-            (tenant_id, now - timedelta(minutes=30)),
-        )
-        by_min = {row[0]: int(row[1]) for row in cur.fetchall()}
-        series = []
-        for i in range(29, -1, -1):
-            m = (now - timedelta(minutes=i)).replace(second=0, microsecond=0)
-            cnt = 0
-            for k, v in by_min.items():
-                if k and abs((k.replace(tzinfo=None) - m).total_seconds()) < 45:
-                    cnt = v
-                    break
-            series.append({"minutes_ago": i, "orders": cnt})
-        cur.execute(
-            """
-            SELECT o.order_id, o.order_purchase_timestamp, o.order_total_amount, o.order_status,
-                   o.customer_id, c.full_name
-            FROM orders o
-            LEFT JOIN customers c ON c.tenant_id = o.tenant_id AND c.customer_id = o.customer_id
-            WHERE o.tenant_id = %s
-            ORDER BY o.order_purchase_timestamp DESC NULLS LAST
-            LIMIT %s
-            """,
-            (tenant_id, limit),
-        )
-        events = []
-        for oid, ts, amount, st, cid, cname in cur.fetchall():
-            pay = "approved"
-            if st in ("cancelled", "canceled"):
-                pay = "failed"
-            elif st in ("pending", "processing"):
-                pay = "pending"
-            events.append(
-                {
-                    "order_id": oid,
-                    "at": ts.isoformat() if ts else None,
-                    "amount": int(amount or 0),
-                    "status": pay,
-                    "customer_id": cid,
-                    "customer_name": cname,
-                }
-            )
-    pending = 0
-    try:
-        raw = get_redis().hgetall(f"fraud_alerts:{tenant_id}") or {}
-        for _k, val in raw.items():
-            import json
-
-            data = json.loads(val)
-            if int(data.get("score", 0)) >= 70:
-                pending += 1
-    except Exception:
-        pass
-    return {
-        "totals": {
-            "orders_5m": int(o5 or 0),
-            "revenue_5m": int(r5 or 0),
-            "orders_60m": int(o60 or 0),
-            "revenue_60m": int(r60 or 0),
-        },
-        "series": series,
-        "events": events,
-        "pending_alerts": pending,
-    }
+# --------------------------------------------------------------------------- live (DÉSACTIVÉ - priorité à reports.py)
+# Note : la route /live/feed de reports.py est incluse AVANT dans main.py
+# pour qu'elle gagne. Cette version Postgres est gardée pour compatibilité.
 
 
 # --------------------------------------------------------------------------- customer detail
@@ -423,7 +275,6 @@ def report_forecast(
     """Historique réel + prévisions sur la même série (couleurs distinctes côté front)."""
     trunc = {"day": "day", "week": "week", "month": "month"}[grain]
     with conn.cursor() as cur:
-        # Historique ventes (unités = lignes order_items)
         hist_sql = f"""
             SELECT DATE_TRUNC(%s, o.order_purchase_timestamp)::date AS d,
                    COUNT(*)::int AS units
@@ -475,7 +326,6 @@ def report_forecast(
             {"product_id": pid, "product_name": pname, "units": u} for pid, pname, u in cur.fetchall()
         ]
 
-    # Série unifiée pour le graphique
     labels = sorted({h["date"] for h in history} | {f["date"] for f in forecast})
     hist_map = {h["date"]: h["units"] for h in history}
     fc_map = {f["date"]: f["units"] for f in forecast}
@@ -489,7 +339,7 @@ def report_forecast(
         "forecast_units": series_forecast,
         "history": history,
         "forecast": forecast,
-        "units": [fc_map.get(d, 0) for d in labels],  # compat ancien front
+        "units": [fc_map.get(d, 0) for d in labels],
         "top_products": top_products,
     }
 
@@ -577,44 +427,30 @@ def kpi_by_category(
                 COALESCE(NULLIF(p.category, ''), 'Non classée') AS category,
                 COUNT(*)::int AS units_sold,
                 COALESCE(SUM(oi.item_total), 0)::float AS revenue,
-                COALESCE(
-                    SUM(COALESCE(p.product_cost, 0)),
-                    0
-                )::float AS cogs
+                COALESCE(SUM(COALESCE(p.product_cost, 0)), 0)::float AS cogs
             FROM order_items oi
-            JOIN orders o
-              ON o.tenant_id = oi.tenant_id
-             AND o.order_id = oi.order_id
-            LEFT JOIN products p
-              ON p.tenant_id = oi.tenant_id
-             AND p.product_id = oi.product_id
-            WHERE oi.tenant_id = %s
-              AND o.order_status != 'cancelled'
+            JOIN orders o ON o.tenant_id = oi.tenant_id AND o.order_id = oi.order_id
+            LEFT JOIN products p ON p.tenant_id = oi.tenant_id AND p.product_id = oi.product_id
+            WHERE oi.tenant_id = %s AND o.order_status != 'cancelled'
             GROUP BY COALESCE(NULLIF(p.category, ''), 'Non classée')
             ORDER BY revenue DESC
             """,
             (tenant_id,),
         )
-
         rows = cur.fetchall()
 
     categories = []
-
     for category, units_sold, revenue, cogs in rows:
         revenue = float(revenue or 0)
         cogs = float(cogs or 0)
         profit = revenue - cogs
         margin = round(100 * profit / revenue, 2) if revenue else 0
-
-        categories.append(
-            {
-                "category": category,
-                "units_sold": int(units_sold or 0),
-                "revenue": round(revenue, 2),
-                "cogs": round(cogs, 2),
-                "profit": round(profit, 2),
-                "margin": margin,
-            }
-        )
-
+        categories.append({
+            "category": category,
+            "units_sold": int(units_sold or 0),
+            "revenue": round(revenue, 2),
+            "cogs": round(cogs, 2),
+            "profit": round(profit, 2),
+            "margin": margin,
+        })
     return {"categories": categories}

@@ -1,21 +1,52 @@
+"""Connexion PostgreSQL et MongoDB (lit les variables d'environnement)."""
+
+import os
+
+import psycopg
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
+# ---------------------------------------------------------------------------
+# PostgreSQL
+# ---------------------------------------------------------------------------
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
+POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
+POSTGRES_DB = os.getenv("POSTGRES_DB", "dataflow_db")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "dataflow")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
 
-MONGO_URI = "mongodb://localhost:27017"
-DATABASE_NAME = "dataflow360"
 
-
-def get_mongo_client() -> MongoClient:
-    """Create and return a MongoDB client."""
-    return MongoClient(
-        MONGO_URI,
-        serverSelectionTimeoutMS=5000,
+def get_pg_connection():
+    """Crée et renvoie une connexion PostgreSQL."""
+    return psycopg.connect(
+        host=POSTGRES_HOST,
+        port=POSTGRES_PORT,
+        dbname=POSTGRES_DB,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
     )
 
 
+# ---------------------------------------------------------------------------
+# MongoDB
+# ---------------------------------------------------------------------------
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://mongo:27017")
+MONGO_DB = os.getenv("MONGO_DB", "dataflow_raw")
+
+
+def get_mongo_db():
+    """Crée et renvoie la base MongoDB."""
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    return client[MONGO_DB]
+
+
+def get_mongo_client() -> MongoClient:
+    """Crée et renvoie un client MongoDB."""
+    return MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+
+
 def test_mongo_connection() -> bool:
-    """Test the connection to MongoDB."""
+    """Test la connexion MongoDB."""
     try:
         client = get_mongo_client()
         client.admin.command("ping")
@@ -31,27 +62,3 @@ if __name__ == "__main__":
         print("Connexion MongoDB réussie.")
     else:
         print("Échec de la connexion MongoDB.")
-
-
-POSTGRES_HOST = "localhost"
-POSTGRES_PORT = 5433
-POSTGRES_DB = "dataflow360"
-POSTGRES_USER = "dataflow"
-POSTGRES_PASSWORD = "change_me"
-
-
-def get_pg_connection():
-    """Create and return a PostgreSQL connection."""
-    import psycopg
-
-    return psycopg.connect(
-        host=POSTGRES_HOST,
-        port=POSTGRES_PORT,
-        dbname=POSTGRES_DB,
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-    )
-
-def get_mongo_db():
-    """Stub pour la connexion MongoDB."""
-    return None

@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS customers (
 CREATE TABLE IF NOT EXISTS products (
     tenant_id UUID REFERENCES tenants(tenant_id),
     product_id TEXT NOT NULL,
+    product_name TEXT,
     category TEXT,
     product_cost INTEGER,
     stock_quantity INTEGER,
@@ -40,6 +41,8 @@ CREATE TABLE IF NOT EXISTS products (
     PRIMARY KEY (tenant_id, product_id)
 );
 
+-- Migration pour les bases existantes
+ALTER TABLE products ADD COLUMN IF NOT EXISTS product_name TEXT;
 -- 4. COMMANDES
 CREATE TABLE IF NOT EXISTS orders (
     tenant_id UUID REFERENCES tenants(tenant_id),

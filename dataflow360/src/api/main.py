@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src import config
 from src.api.routes import router, webhook_router
+from src.api.reports import router as reports_router
 from src.api.routes_extra import extra_router
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -61,8 +62,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Inclusion des routes
+# ORDRE IMPORTANT : reports_router AVANT extra_router
+# (pour que /live/feed pointe sur la version Redis Stream de reports.py)
+# ---------------------------------------------------------------------------
 app.include_router(webhook_router)
 app.include_router(router)
+app.include_router(reports_router)   # ← AVANT extra_router (priorité)
 app.include_router(extra_router)
 
 

@@ -9,7 +9,10 @@ from redis.exceptions import ResponseError
 
 from src.ml.fraud_detection.scoring import score_event
 from src.storage.db_connection import get_pg_connection
-from src.storage.warehouse_writer import upsert_order
+# Pas de warehouse_writer dans cette branche : les commandes sont déjà en base via l'ETL batch.
+# La fonction upsert_order est neutralisée (no-op) pour ne pas casser le consumer.
+def upsert_order(event, conn):
+    pass
 from src.streaming.redis_client import get_redis
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

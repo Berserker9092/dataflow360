@@ -430,13 +430,20 @@ def export_timeseries(
     summary="État des stocks (RUPTURE / ALERTE / OK)",
     description="Le seuil vient de products.stock_alert_threshold. Les plus critiques d'abord.",
 )
-def stock_overview(
-    limit: int = 200, tenant_id: str = Depends(get_current_tenant), conn=Depends(get_db)
-):
+
+@router.get("/stock/status", tags=["stock"])
+def stock_overview(limit: int = 200, tenant_id: str = Depends(get_current_tenant), conn=Depends(get_db)):
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT product_id, category, stock_quantity, stock_alert_threshold FROM products "
-            "WHERE tenant_id = %s",
+            """
+            SELECT product_id,
+                   COALESCE(NULLIF(product_name, ''), 'Produit sans nom') AS product_name,
+                   COALESCE(NULLIF(category, ''), 'Sans catégorie') AS category,
+                   stock_quantity,
+                   stock_alert_threshold
+            FROM products
+            WHERE tenant_id = %s
+            """,
             (tenant_id,),
         )
         rows = cur.fetchall()
@@ -444,17 +451,16 @@ def stock_overview(
     out = [
         {
             "product_id": pid,
-            "product_name": (cat or pid),
+            "product_name": name,
             "category": cat,
             "stock_quantity": int(qty or 0),
             "stock_alert_threshold": int(thr or 0),
             "status": stock_status(int(qty or 0), int(thr or 0)),
         }
-        for pid, cat, qty, thr in rows
+        for pid, name, cat, qty, thr in rows
     ]
     out.sort(key=lambda x: (order[x["status"]], x["stock_quantity"]))
     return out[:limit]
-
 
 # --------------------------------------------------------------------------- fraude
 @router.get(
@@ -464,7 +470,7 @@ def stock_overview(
     description="Uniquement les alertes du tenant authentifié (HASH Redis par tenant, 24 h).",
 )
 def get_alerts(
-    min_score: int = 70,
+    min_score: int = 30,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Par défaut : uniquement score >= 70 (priorité vendeur)."""
@@ -512,7 +518,8 @@ def forecast_products(tenant_id: str = Depends(get_current_tenant), conn=Depends
             """
             SELECT f.product_id,
                    COALESCE(NULLIF(p.product_name, ''), f.product_id) AS product_name,
-                   SUM(f.predicted_units) AS total
+                   SUM(f.predicted_units) AS total,
+                   COUNT(DISTINCT f.forecast_date) AS nb_weeks
             FROM forecasts f
             LEFT JOIN products p ON p.tenant_id = f.tenant_id AND p.product_id = f.product_id
             WHERE f.tenant_id = %s
@@ -521,8 +528,15 @@ def forecast_products(tenant_id: str = Depends(get_current_tenant), conn=Depends
             """,
             (tenant_id,),
         )
-        # Liste d'ids (compat select front) — le front peut aussi lire product_name via /kpi/top-products
-        return [row[0] for row in cur.fetchall()]
+        return [
+            {
+                "product_id": row[0],
+                "product_name": row[1] or row[0],
+                "total": float(row[2] or 0),  # ← float au lieu d'int
+                "nb_weeks": int(row[3] or 0),
+            }
+            for row in cur.fetchall()
+        ]
 
 
 @router.get(
