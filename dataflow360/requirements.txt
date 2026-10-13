@@ -1,7 +1,7 @@
 fastapi
 uvicorn[standard]
 pydantic
-psycopg2-binary
+psycopg[binary]
 pymongo
 redis
 elasticsearch

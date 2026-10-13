@@ -39,6 +39,8 @@ def stock_status(quantity: int, threshold: int) -> str:
         return "ALERTE"
 
     return "OK"
+
+
 def clean_products(df: pl.DataFrame) -> pl.DataFrame:
     """
     Nettoie les données produits avant chargement PostgreSQL.
@@ -67,24 +69,24 @@ def clean_products(df: pl.DataFrame) -> pl.DataFrame:
         ])
     )
 
-def clean_products(df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Nettoie les données produits avant chargement PostgreSQL.
-    """
+
+def clean_order_items(df: pl.DataFrame) -> pl.DataFrame:
+    """Clean order items before loading into PostgreSQL."""
     return (
-        df.unique(subset=["product_id"])
-        .drop_nulls(subset=["product_id"])
+        df.unique(subset=["order_id", "order_item_id"])
+        .drop_nulls(subset=["order_id", "order_item_id", "product_id"])
         .with_columns(
-            pl.col("product_cost").cast(pl.Int64),
-            pl.col("stock_quantity").cast(pl.Int64),
-            pl.col("stock_alert_threshold").cast(pl.Int64),
+            pl.col("order_item_id").cast(pl.Int64),
+            pl.col("quantity").cast(pl.Int64),
+            pl.col("unit_price").cast(pl.Int64),
+            pl.col("item_total").cast(pl.Int64),
         )
-        .rename({"category_name": "category"})
         .select([
+            "order_id",
+            "order_item_id",
             "product_id",
-            "category",
-            "product_cost",
-            "stock_quantity",
-            "stock_alert_threshold",
+            "quantity",
+            "unit_price",
+            "item_total",
         ])
     )

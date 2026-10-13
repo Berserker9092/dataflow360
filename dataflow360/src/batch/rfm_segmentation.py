@@ -132,6 +132,7 @@ def segment_customer(row: dict) -> str:
     if r <= 2 and f <= 2 and m <= 2:
         return "Clients perdus/faibles"
 
+<<<<<<< HEAD
     return "Clients occasionnels"
 def run_rfm():
     print("Extraction des commandes...")
@@ -151,3 +152,6 @@ def run_rfm():
 
 if __name__ == "__main__":
     run_rfm()
+=======
+    return "Clients occasionnels"
+>>>>>>> origin/feature/data-engineering
