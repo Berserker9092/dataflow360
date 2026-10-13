@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="124" viewBox="0 0 400 124" fill="none">
+  <defs>
+    <linearGradient id="goldGrad" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#D97706"/>
+      <stop offset=".5" stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#FBBF24"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset=".5" stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#1D4ED8"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#BAE6FD"/>
+    </linearGradient>
+    <linearGradient id="managementGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FBBF24"/>
+      <stop offset="1" stop-color="#FDE68A"/>
+    </linearGradient>
+    <linearGradient id="sloganGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#A5F3FC"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <g transform="translate(62 62) scale(.48)">
+    <circle r="105" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="6 8"/>
+    <path d="M-80 40A90 90 0 0 1 70-50" fill="none" stroke="url(#blueGrad)" stroke-width="4" stroke-linecap="round" opacity=".4"/>
+    <path d="M-75-25-45 65-10 0" fill="none" stroke="url(#blueGrad)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M-10 0 25 65 75-25" fill="none" stroke="url(#goldGrad)" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+    <g transform="translate(0 -75)" filter="url(#glow)">
+      <path d="m0-22 6 16 16 6L6 6 0 22-6 6-22 0l16-6z" fill="url(#goldGrad)"/>
+      <circle r="3" fill="#FFF"/>
+    </g>
+    <circle cx="-75" cy="-25" r="5" fill="#38BDF8"/>
+    <circle cx="75" cy="-25" r="5" fill="#FBBF24"/>
+    <circle cx="-45" cy="65" r="4" fill="#1D4ED8"/>
+    <circle cx="25" cy="65" r="4" fill="#D97706"/>
+    <g transform="translate(60 40)">
+      <circle r="25" fill="#1E293B" stroke="url(#goldGrad)" stroke-width="5"/>
+      <path d="M-5-3h2l2 6h6l2-4h-9" fill="none" stroke="#FBBF24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cy="6" r="1" fill="#FBBF24"/>
+      <circle cx="4" cy="6" r="1" fill="#FBBF24"/>
+    </g>
+  </g>
+</svg>
