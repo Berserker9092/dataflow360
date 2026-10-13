@@ -8,7 +8,13 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS tenants (
     tenant_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
-    api_key_hash TEXT NOT NULL UNIQUE
+    api_key_hash TEXT NOT NULL UNIQUE,
+    email TEXT UNIQUE,
+    company_name TEXT,
+    contact_name TEXT,
+    phone TEXT,
+    country TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 2. CLIENTS
@@ -17,6 +23,9 @@ CREATE TABLE IF NOT EXISTS customers (
     customer_id TEXT NOT NULL,
     city TEXT,
     country TEXT,
+    full_name TEXT,
+    email TEXT,
+    phone TEXT,
     PRIMARY KEY (tenant_id, customer_id)
 );
 
