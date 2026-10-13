@@ -1,5 +1,7 @@
 import csv
 import datetime
+import os
+
 from pathlib import Path
 
 from src.storage.db_connection import get_mongo_client
@@ -10,8 +12,8 @@ RAW_DATA_DIR = Path("data/raw")
 # Configuration MongoDB
 DATABASE_NAME = "dataflow360"
 
-# Tenant utilisé pour le chargement historique
-TENANT_ID = "tenant_demo"
+# Nom du tenant de démo (lu depuis .env)
+TENANT_ID = os.getenv("TENANT_NAME", "Boutique démo")
 
 # Nombre de documents insérés à chaque lot
 BATCH_SIZE = 1000

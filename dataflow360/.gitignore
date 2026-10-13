@@ -22,3 +22,24 @@ env/
 .DS_Store
 .vscode/
 .idea/
+
+# Backups
+*.bak
+*.bak2
+*.bak.*
+
+# ML models (binaires lourds)
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.onnx
+
+# ML models (fichiers binaires lourds - ne pas committer)
+*.pkl
+*.joblib
+*.h5
+*.pt
+*.onnx
+*.pth
+dataflow360/src/ml/fraud_detection/models/*.pkl

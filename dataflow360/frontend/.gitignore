@@ -1,0 +1,25 @@
+# Dépendances
+node_modules/
+dist/
+.vite/
+
+# Backups
+*.bak
+*.bak.*
+*.proto.bak
+
+# Environnement
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
