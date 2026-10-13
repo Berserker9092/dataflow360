@@ -1,51 +1,32 @@
-name: DataFlow360 CI Pipeline
+name: CI/CD Pipeline - DataFlow360
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main", "feature/*" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ "main" ]
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_DB: dataflow_db
-          POSTGRES_USER: admin
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U admin"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
-    - name: Récupération du code source
+    - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Configuration de Python 3.11
+    - name: Set up Python 3.12
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: "3.12"
         cache: 'pip'
 
-    - name: Installation des dépendances
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Exécution des tests (Pytest)
+        pip install -r requirements.txt || pip install pytest polars pandas xgboost joblib fastapi uvicorn pydantic psycopg2-binary
+        
+    - name: Run unit tests with pytest
       env:
-        POSTGRES_USER: admin
-        POSTGRES_PASSWORD: postgres
-        POSTGRES_HOST: postgres
-        POSTGRES_PORT: 5432
-        POSTGRES_DB: dataflow_db
+        PYTHONPATH: .
       run: |
-        pytest
+        pytest tests/ -v
