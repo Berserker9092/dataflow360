@@ -133,3 +133,21 @@ def segment_customer(row: dict) -> str:
         return "Clients perdus/faibles"
 
     return "Clients occasionnels"
+def run_rfm():
+    print("Extraction des commandes...")
+    df = extract_delivered_orders()
+    if df.is_empty():
+        print("Aucune donnée trouvée.")
+        return
+    
+    print("Calcul des métriques RFM...")
+    rfm_df = calculate_rfm(df)
+    
+    print("Attribution des scores RFM...")
+    scored_df = score_rfm(rfm_df)
+    
+    print("Aperçu des résultats :")
+    print(scored_df.head(10))
+
+if __name__ == "__main__":
+    run_rfm()
