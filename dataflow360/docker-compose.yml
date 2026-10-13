@@ -1,8 +1,5 @@
-<<<<<<< HEAD
 name: dataflow360
 
-=======
->>>>>>> origin/feature/data-engineering
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -11,19 +8,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-<<<<<<< HEAD
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-=======
-      - "5433:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dataflow"]
->>>>>>> origin/feature/data-engineering
       interval: 10s
       timeout: 5s
       retries: 5
@@ -37,17 +26,12 @@ services:
 
   redis:
     image: redis:7
-<<<<<<< HEAD
     command: redis-server --appendonly yes
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
 
-=======
-    ports:
-      - "6379:6379"
->>>>>>> origin/feature/data-engineering
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     environment:
@@ -55,11 +39,7 @@ services:
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-<<<<<<< HEAD
       - "9201:9200"
-=======
-      - "9200:9200"
->>>>>>> origin/feature/data-engineering
     volumes:
       - es_data:/usr/share/elasticsearch/data
 
@@ -68,23 +48,16 @@ services:
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     ports:
-<<<<<<< HEAD
       - "5602:5601"
     depends_on:
       - elasticsearch
 
-=======
-      - "5601:5601"
-    depends_on:
-      - elasticsearch
->>>>>>> origin/feature/data-engineering
   logstash:
     image: docker.elastic.co/logstash/logstash:8.15.0
     volumes:
       - ./docker/logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
     depends_on:
       - elasticsearch
-<<<<<<< HEAD
     ports:
       - "5000:5000"
 
@@ -103,14 +76,9 @@ services:
         condition: service_started
     volumes:
       - .:/app
-=======
->>>>>>> origin/feature/data-engineering
 
 volumes:
   postgres_data:
   mongo_data:
   es_data:
-<<<<<<< HEAD
   redis_data:
-=======
->>>>>>> origin/feature/data-engineering

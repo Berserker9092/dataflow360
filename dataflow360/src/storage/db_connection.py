@@ -51,10 +51,7 @@ def get_pg_connection():
         user=POSTGRES_USER,
         password=POSTGRES_PASSWORD,
     )
-<<<<<<< HEAD
 
 def get_mongo_db():
     """Stub pour la connexion MongoDB."""
     return None
-=======
->>>>>>> origin/feature/data-engineering
