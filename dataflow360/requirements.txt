@@ -2,6 +2,11 @@ fastapi
 uvicorn[standard]
 pydantic
 psycopg2-binary
+pymongo
 redis
-motor
 elasticsearch
+httpx
+polars
+joblib
+scikit-learn
+xgboost
