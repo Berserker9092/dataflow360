@@ -1,0 +1,13 @@
+.env
+.git
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+venv/
+data/raw/*
+data/processed/*
+*.pkl
+*.joblib
+.vscode/
+.idea/

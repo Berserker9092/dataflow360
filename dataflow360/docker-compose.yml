@@ -1,3 +1,5 @@
+name: dataflow360
+
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -10,7 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dataflow"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,8 +26,12 @@ services:
 
   redis:
     image: redis:7
+    command: redis-server --appendonly yes
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     environment:
@@ -33,7 +39,7 @@ services:
       - xpack.security.enabled=false
       - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
     ports:
-      - "9200:9200"
+      - "9201:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
 
@@ -42,9 +48,10 @@ services:
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     ports:
-      - "5601:5601"
+      - "5602:5601"
     depends_on:
       - elasticsearch
+
   logstash:
     image: docker.elastic.co/logstash/logstash:8.15.0
     volumes:
@@ -54,7 +61,24 @@ services:
     ports:
       - "5000:5000"
 
+  api:
+    build: .
+    container_name: dataflow360_api
+    command: python -m uvicorn dataflow360.src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - .:/app
+
 volumes:
   postgres_data:
   mongo_data:
   es_data:
+  redis_data:
